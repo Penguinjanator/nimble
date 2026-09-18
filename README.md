@@ -531,7 +531,7 @@ the dataset release that you used.
 
 ```bibtex
 @misc{nimble2026,
-  author = {Sathiamoorthy, Maheswaran},
+  author = {{Bespoke Labs} and Sathiamoorthy, Maheswaran},
   title = {Nimble},
   year = {2026},
   howpublished = {\url{https://github.com/bespokelabsai/nimble}},
@@ -544,3 +544,4 @@ the dataset release that you used.
 1. [TypeSafe](https://typesafe.ai) for making Jev.
 2. [Niels Rogge](https://x.com/NielsRogge) for a [post on how Jev does decoding](https://x.com/NielsRogge/status/2100239244501430438).
 3. [Harsha Gundala](https://x.com/harshagundal) for [inspiring us to work on this](https://x.com/harshagundal/status/2100044305536889015).
+4. [Greg Durett](https://gregdurrett.github.io/) and [Liyan Tang](https://www.tangliyan.com/)'s work on MiniCheck (and check out Bespoke-MiniCheck which we did with them), which was two years early and laid the foundations.
