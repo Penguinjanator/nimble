@@ -223,6 +223,7 @@ def main():
     parser.add_argument('--port', type=int, default=8891)
     parser.add_argument('--bind', default='127.0.0.1')
     parser.add_argument('--public-origin', help='Exact HTTPS origin when hosted behind a TLS proxy')
+    parser.add_argument('--proxy-host', help='Exact internal Host used by the HTTPS proxy, if rewritten')
     parser.add_argument('--password-file', type=Path, help='Private file containing the hosted site password')
     parser.add_argument('--providers', nargs='+', choices=['nimble', 'mac', 'jev'], default=['nimble', 'mac', 'jev'])
     parser.add_argument('--adapter-dir', type=Path, default=PROJECT_ROOT/'.cache/adapters/openjeff-diverse9b-v2')
@@ -267,7 +268,12 @@ def main():
             self.wfile.write(body)
 
         def allowed_host(self):
-            return self.headers.get('Host') in hosts
+            if self.headers.get('Host') in hosts:
+                return True
+            return bool(args.public_origin and args.proxy_host
+                        and self.headers.get('Host') == args.proxy_host
+                        and self.headers.get('X-Forwarded-Host') == urlsplit(origin).netloc
+                        and self.headers.get('X-Forwarded-Proto') == 'https')
 
         def authenticated(self):
             if password is None:

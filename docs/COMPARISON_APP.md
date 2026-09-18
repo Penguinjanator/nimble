@@ -98,3 +98,49 @@ Tests:
 ```sh
 .venv-curator/bin/python -m unittest tests.test_playground
 ```
+
+## Separate hosted and MacBook pages
+
+The app supports independent two-model deployments with the same stratified
+30-example sample and streaming result cards:
+
+- RunPod: `--providers nimble jev`, with the web process and CUDA worker on the
+  same H100 machine. Response times are measured from RunPod, excluding browser
+  transport. No MacBook connection is needed.
+- MacBook: `--providers mac jev`, with the local MLX worker. Response times are
+  measured from the Mac. Keep a separate `--state-dir` to avoid mixing timing
+  populations. The previous three-backend history remains in its original folder.
+
+For hosted access, use RunPod's HTTPS proxy and configure the exact origin:
+
+```sh
+python -m nimble.playground.server \
+  --bind 0.0.0.0 --port 8891 --providers nimble jev \
+  --gpu-url http://127.0.0.1:8765 \
+  --adapter-dir /workspace/comparison/model \
+  --data /workspace/comparison/site/data/eval.jsonl \
+  --state-dir /workspace/comparison/site/results \
+  --run-file /workspace/comparison/site/run.json \
+  --public-origin https://POD_ID-8891.proxy.runpod.net \
+  --password-file /workspace/comparison/site/access-password
+```
+
+Public binding requires both an HTTPS origin and a password file (a randomly
+generated password of at least 24 characters). The site authenticates all data
+and inference routes, uses a Secure/HttpOnly/SameSite cookie, validates Host and
+Origin, and requires a session request token. The CUDA worker remains loopback
+only; expose the web port as HTTP through RunPod, not as a direct TCP port.
+
+Copy only the TypeSafe key required by the hosted app into its private `.env`
+file after explicit authorization. Do not upload the entire local `.env`.
+The current hosted session uses a one-hour extension of the existing pod;
+automatic deletion remains scheduled. Access details are stored locally in
+`.cache/comparison-app/hosted-access.txt` (not tracked by Git). Saved hosted
+results are in `/workspace/comparison/site/results/comparisons.jsonl`; the session guard backs these up to
+`.cache/comparison-app/hosted-results.jsonl` before deleting the temporary pod.
+You can also export them from the page at any time.
+
+If RunPod rewrites the HTTP Host, add `--proxy-host INTERNAL_HOST:PORT` using
+the observed proxy destination. The app also requires the forwarded public host
+and HTTPS scheme to match its configured origin; arbitrary forwarded hosts are
+not accepted.

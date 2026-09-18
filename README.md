@@ -1,8 +1,10 @@
-# Bespoke-Nimble-9B
+# Bespoke Nimble
 
-**The best *Open* System 1 model :)**
+**Data, Model, Recipe for an open Jev**
 
 [Model](https://huggingface.co/bespokelabs/Bespoke-Nimble-9B) · [Capabilities](#capabilities) · [Quickstart](#quickstart) · [Methodology](#methodology) · [Documentation and development](#documentation-and-development) · [Citation](#citation)
+
+![Introducing Bespoke Nimble. Serving reads the prompt once and then scores one answer token per question. Data curation changes one fact so that the correct answer flips. Training fine-tunes Qwen3.5-9B with LoRA on the answer tokens only. On 324 held-out examples, Bespoke-Nimble-9B matches 90.1% of the reference labels, compared with 66.4% for its base model and 93.2% for Jev 1.13.0.](assets/diagrams/nimble-infographic.svg)
 
 Nimble takes some text and a schema, and makes typed decisions about the text.
 The schema is the list of questions to answer. Each question is either a choice
@@ -10,7 +12,7 @@ from a list that you give or a true or false question. For each question, Nimble
 returns the answer it picked and the probability of each allowed answer.
 
 Nimble makes each decision in one step and does not write out any reasoning
-first, so it is fast. This is what we mean by a System 1 model. Nimble is
+first, so it is fast (blazing fast!). Nimble is
 inspired by the System One approach of
 [TypeSafe's Jev](https://docs.typesafe.ai/primitives/choice). In this repository,
 we share our recipe for training such a model.
@@ -72,7 +74,7 @@ separately, so one field cannot see the answer to another field.
   answers to different fields are consistent.
 
 We trained Bespoke-Nimble-9B on 2,676 examples that we curated. So it's performance will depend on this data and the domains it comes from. So don't expect a lot of generalization.
-But we do see that overall the model has gotten better overall.
+But we do see that Nibmle is overall better than it's base model Qwen3.5-9B in new domains.
 
 
 ## Quickstart
@@ -255,9 +257,24 @@ can run the scorer.
 
 ## Methodology
 
+The serving methodology and training data curation are heavily inspired by [Bespoke-MiniCheck](https://huggingface.co/bespokelabs/Bespoke-MiniCheck-7B).
+
+### Serving
+We follow the approach laid out by [Niels Rogge](https://x.com/NielsRogge): see this [post on how Jev does decoding](https://x.com/NielsRogge/status/2100239244501430438).
+
+In a nutshell:
+* Process the context and schema once (prefill the KV-cache)
+* We obtain the scores for the tokens we care about.
+
+We used this approach (we didn't have to do kv-cache prefill) in Bespoke-MiniCheck, since it always returned a single json tuple: `{"is_claim_supported_by_context": p}`.
+
 ### Contrastive data curation
 
-We made the training data with a new method that we call contrastive data
+The challenge here is that we don't have access to probabilities from a teacher model (or humans). But as you saw above, we just need to somehow get the logits and ensure the logits are as calibrated to estimate the probabilities as possible.
+
+We push the model to be calibrated to be a better decision maker by creating negative examples, which forces the model to become a better discriminator.
+
+So we made the training data with a new method that we call contrastive data
 curation. In this method, we write two examples that are almost the same. They
 differ in one relevant fact, and this difference changes the correct answer.
 Everything else stays the same, including the question and the policy. From
@@ -312,8 +329,38 @@ There is one training set and one held-out set.
 
 | File | Examples | Use |
 | --- | ---: | --- |
-| `data/train.jsonl` | 2,826 | Model training |
+| `data/train.jsonl` | 2,826 | 2,676 used to train the published model |
 | `data/eval.jsonl` | 324 | Final evaluation only |
+
+The published model's training data covers **10 subject categories**. The tables
+below count only its 2,676 training examples and the 324-example holdout.
+Category counts come from each record's `domain` field; the holdout covers six
+of these categories.
+
+| Category | Training examples | Held-out examples |
+| --- | ---: | ---: |
+| Commerce | 242 | 58 |
+| Education | 230 | 70 |
+| Home | 300 | 0 |
+| Media | 256 | 44 |
+| Public services | 194 | 106 |
+| Science | 300 | 0 |
+| Software | 300 | 0 |
+| Supply chain | 270 | 30 |
+| Travel | 284 | 16 |
+| Workplace | 300 | 0 |
+| **Total** | **2,676** | **324** |
+
+
+Across these subjects, each example asks one of three
+[typed questions](https://docs.typesafe.ai/primitives):
+
+| Task type | Judgment | Training examples | Held-out examples |
+| --- | --- | ---: | ---: |
+| Choice | Select one candidate | 856 | 146 |
+| Noul (Boolean) | Decide whether a condition holds | 888 | 114 |
+| Score | Judge an ordered rubric level | 932 | 64 |
+| **Total** | | **2,676** | **324** |
 
 All of the labels are synthetic: a model checked them, and no person has reviewed them. Separate calls to the same model can make the same mistake, so the checks can miss some errors. See the
 [generation and replay guide](docs/TRAINING_EVAL_CURATION.md) for the full
