@@ -19,6 +19,7 @@ from openjev.runtime import stop_process, wait_ready
 from openjev.service import EvaluationService
 
 from nimble.scoring import parallel_schema
+from nimble.scoring.calibration import ADAPTER_REVISIONS, fitted_temperature
 from .compiler import NimbleCompiler
 
 MODEL = "bespokelabs/Bespoke-Nimble-9B"
@@ -28,6 +29,16 @@ TRAINED_PROMPT_TOKENS = 2048
 MAX_PROMPT_TOKENS = int(os.environ.get("NIMBLE_MAX_PROMPT_TOKENS", "8192"))
 
 
+def served_temperature(ready):
+    """Return the fitted temperature for the checkpoint that READY.json describes, else 1.0.
+
+    deploy/modal_app.py records the Hub revision. merge_local_adapter.py records only the
+    adapter's SHA-256. In both files, base_revision is the Qwen base and never selects one.
+    """
+    revision = ready.get("revision") or ADAPTER_REVISIONS.get(ready.get("adapter_sha256"))
+    return fitted_temperature(MODEL, revision) or 1.0
+
+
 def make_app(settings, service):
     app = create_app(settings, service=service)
     app.title = "Nimble"
@@ -35,7 +46,8 @@ def make_app(settings, service):
         "Nimble's trained candidate scoring on SGLang. Choice, Noul, and Score; "
         f"26 candidates, up to {MAX_PROMPT_TOKENS} prompt tokens (trained at {TRAINED_PROMPT_TOKENS}). "
         "Question IDs and option keys are included "
-        "in the trained prompt. Confidence is entropy concentration, not calibrated accuracy."
+        f"in the trained prompt. Probabilities use temperature {settings.temperature:.4g}. "
+        "Confidence is entropy concentration, not calibrated accuracy."
     )
     app.router.routes[:] = [r for r in app.router.routes if r.path not in {"/", "/v1/models", "/v1/limits"}]
     @app.get("/", include_in_schema=False)
@@ -88,7 +100,8 @@ async def main():
     settings = Settings(model=str(path), served_model_name=MODEL, model_alias="nimble-latest",
                         max_input_tokens=MAX_PROMPT_TOKENS + 1,
                         max_total_input_tokens=32 * (MAX_PROMPT_TOKENS + 1),
-                        max_concurrent_requests=4, max_concurrent_branches=32)
+                        max_concurrent_requests=4, max_concurrent_branches=32,
+                        temperature=served_temperature(json.loads((path / "READY.json").read_text())))
     command = ["/opt/sglang/bin/python", "-m", "sglang.launch_server",
                "--model-path", str(path), "--tokenizer-path", str(path),
                "--host", "127.0.0.1", "--port", "30000",
